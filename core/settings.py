@@ -1,14 +1,31 @@
 import os
 from pathlib import Path
 from dotenv import load_dotenv
+import dj_database_url
 
 load_dotenv()
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 
-SECRET_KEY = os.getenv('SECRET_KEY', 'django-insecure-change-this-in-production')
+# ─────────────────────────────────────────────
+# SECURITY
+# ─────────────────────────────────────────────
+
+SECRET_KEY = os.getenv(
+    'SECRET_KEY',
+    'django-insecure-change-this-in-production'
+)
+
 DEBUG = os.getenv('DEBUG', 'False') == 'True'
-ALLOWED_HOSTS = os.getenv('ALLOWED_HOSTS', 'localhost,127.0.0.1').split(',')
+
+ALLOWED_HOSTS = os.getenv(
+    'ALLOWED_HOSTS',
+    'localhost,127.0.0.1,.onrender.com'
+).split(',')
+
+# ─────────────────────────────────────────────
+# APPS
+# ─────────────────────────────────────────────
 
 INSTALLED_APPS = [
     'django.contrib.admin',
@@ -17,19 +34,30 @@ INSTALLED_APPS = [
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
+
     # Third party
     'rest_framework',
     'corsheaders',
     'django_filters',
     'drf_spectacular',
+
+    # Celery scheduler (IMPORTANT)
     'django_celery_beat',
+
     # Local
     'alertas',
 ]
 
+# ─────────────────────────────────────────────
+# MIDDLEWARE
+# ─────────────────────────────────────────────
+
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
+    'whitenoise.middleware.WhiteNoiseMiddleware',
+
     'corsheaders.middleware.CorsMiddleware',
+
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
@@ -39,6 +67,10 @@ MIDDLEWARE = [
 ]
 
 ROOT_URLCONF = 'core.urls'
+
+# ─────────────────────────────────────────────
+# TEMPLATES
+# ─────────────────────────────────────────────
 
 TEMPLATES = [
     {
@@ -58,16 +90,19 @@ TEMPLATES = [
 
 WSGI_APPLICATION = 'core.wsgi.application'
 
+# ─────────────────────────────────────────────
+# DATABASE (RENDER READY)
+# ─────────────────────────────────────────────
+
 DATABASES = {
-    'default': {
-        'ENGINE': 'django.db.backends.postgresql',
-        'NAME': os.getenv('DB_NAME', 'ms_alertas_db'),
-        'USER': os.getenv('DB_USER', 'postgres'),
-        'PASSWORD': os.getenv('DB_PASSWORD', 'postgres'),
-        'HOST': os.getenv('DB_HOST', 'localhost'),
-        'PORT': os.getenv('DB_PORT', '5432'),
-    }
+    'default': dj_database_url.parse(
+        os.getenv('DATABASE_URL', f"sqlite:///{BASE_DIR / 'db.sqlite3'}")
+    )
 }
+
+# ─────────────────────────────────────────────
+# AUTH
+# ─────────────────────────────────────────────
 
 AUTH_PASSWORD_VALIDATORS = [
     {'NAME': 'django.contrib.auth.password_validation.UserAttributeSimilarityValidator'},
@@ -76,16 +111,34 @@ AUTH_PASSWORD_VALIDATORS = [
     {'NAME': 'django.contrib.auth.password_validation.NumericPasswordValidator'},
 ]
 
+# ─────────────────────────────────────────────
+# INTERNATIONALIZATION
+# ─────────────────────────────────────────────
+
 LANGUAGE_CODE = 'es-mx'
 TIME_ZONE = 'America/Mexico_City'
 USE_I18N = True
 USE_TZ = True
 
+# ─────────────────────────────────────────────
+# STATIC FILES (RENDER FIX)
+# ─────────────────────────────────────────────
+
 STATIC_URL = '/static/'
 STATIC_ROOT = BASE_DIR / 'staticfiles'
+
+STATICFILES_STORAGE = 'whitenoise.storage.CompressedManifestStaticFilesStorage'
+
+# ─────────────────────────────────────────────
+# DEFAULT AUTO FIELD
+# ─────────────────────────────────────────────
+
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
-# ── DRF ──────────────────────────────────────────────────────────────────────
+# ─────────────────────────────────────────────
+# DRF
+# ─────────────────────────────────────────────
+
 REST_FRAMEWORK = {
     'DEFAULT_PERMISSION_CLASSES': [
         'rest_framework.permissions.IsAuthenticated',
@@ -100,24 +153,43 @@ REST_FRAMEWORK = {
     'DEFAULT_SCHEMA_CLASS': 'drf_spectacular.openapi.AutoSchema',
 }
 
-# ── CORS ─────────────────────────────────────────────────────────────────────
+# ─────────────────────────────────────────────
+# CORS
+# ─────────────────────────────────────────────
+
 CORS_ALLOWED_ORIGINS = os.getenv(
     'CORS_ALLOWED_ORIGINS',
     'http://localhost:5173,http://localhost:3000'
 ).split(',')
 
-# ── URLs de otros microservicios ──────────────────────────────────────────────
+# ─────────────────────────────────────────────
+# MICROSERVICES COMMUNICATION
+# ─────────────────────────────────────────────
+
 MS_EQUIPOS_URL = os.getenv('MS_EQUIPOS_URL', 'http://localhost:8001')
 MS_CLIENTES_URL = os.getenv('MS_CLIENTES_URL', 'http://localhost:8002')
 
-# ── Celery + Redis (tareas periódicas) ────────────────────────────────────────
-REDIS_URL = os.getenv('REDIS_URL', 'redis://localhost:6379/0')
+# ─────────────────────────────────────────────
+# CELERY + REDIS (IMPORTANT FOR PRODUCTION)
+# ─────────────────────────────────────────────
+
+REDIS_URL = os.getenv('REDIS_URL')
+
 CELERY_BROKER_URL = REDIS_URL
 CELERY_RESULT_BACKEND = REDIS_URL
 CELERY_TIMEZONE = TIME_ZONE
+
 CELERY_BEAT_SCHEDULER = 'django_celery_beat.schedulers:DatabaseScheduler'
 
-# ── OpenAPI ───────────────────────────────────────────────────────────────────
+# fallback seguro (evita crash si no hay Redis aún)
+if not REDIS_URL:
+    CELERY_BROKER_URL = 'redis://localhost:6379/0'
+    CELERY_RESULT_BACKEND = 'redis://localhost:6379/0'
+
+# ─────────────────────────────────────────────
+# OPENAPI
+# ─────────────────────────────────────────────
+
 SPECTACULAR_SETTINGS = {
     'TITLE': 'PrintControl — Alertas API',
     'DESCRIPTION': 'Motor de alertas: tóner bajo, cuota excedida, contratos por vencer.',
