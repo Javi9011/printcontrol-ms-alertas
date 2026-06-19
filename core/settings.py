@@ -17,6 +17,7 @@ SECRET_KEY = os.getenv(
 )
 
 DEBUG = os.getenv('DEBUG', 'False') == 'True'
+SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
 
 ALLOWED_HOSTS = os.getenv(
     'ALLOWED_HOSTS',
@@ -140,8 +141,11 @@ DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 # ─────────────────────────────────────────────
 
 REST_FRAMEWORK = {
+    'DEFAULT_AUTHENTICATION_CLASSES': [
+        'rest_framework.authentication.SessionAuthentication',
+    ],
     'DEFAULT_PERMISSION_CLASSES': [
-        'rest_framework.permissions.IsAuthenticated',
+        'rest_framework.permissions.AllowAny',
     ],
     'DEFAULT_FILTER_BACKENDS': [
         'django_filters.rest_framework.DjangoFilterBackend',
@@ -161,6 +165,11 @@ CORS_ALLOWED_ORIGINS = os.getenv(
     'CORS_ALLOWED_ORIGINS',
     'http://localhost:5173,http://localhost:3000'
 ).split(',')
+CORS_ALLOW_ALL_ORIGINS = False
+
+CSRF_TRUSTED_ORIGINS = [
+    "https://*.onrender.com",
+]
 
 # ─────────────────────────────────────────────
 # MICROSERVICES COMMUNICATION
@@ -168,6 +177,7 @@ CORS_ALLOWED_ORIGINS = os.getenv(
 
 MS_EQUIPOS_URL = os.getenv('MS_EQUIPOS_URL', 'http://localhost:8001')
 MS_CLIENTES_URL = os.getenv('MS_CLIENTES_URL', 'http://localhost:8002')
+MS_MANTENIMIENTO_URL = os.getenv('MS_MANTENIMIENTO_URL','http://localhost:8003')
 
 # ─────────────────────────────────────────────
 # CELERY + REDIS (IMPORTANT FOR PRODUCTION)
