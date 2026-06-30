@@ -18,4 +18,4 @@ RUN python manage.py collectstatic --noinput
 
 EXPOSE 8003
 
-CMD ["gunicorn", "core.wsgi:application", "--bind", "0.0.0.0:8003", "--workers", "2"]
+CMD ["/bin/sh", "-c", "python manage.py migrate --noinput && gunicorn core.wsgi:application --bind 0.0.0.0:8003 --workers 2"]
