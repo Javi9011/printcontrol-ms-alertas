@@ -33,17 +33,29 @@ def _config(clave: str, default) -> float:
         return default
 
 
+
 def _upsert_alerta(tipo, nivel, equipo_id=None, equipo_nombre='', equipo_serial='',
                    cliente_id=None, cliente_nombre='', contrato_id=None,
                    contrato_numero='', mensaje='', datos_extra=None):
     """
-    Crea la alerta si no existe activa, o la actualiza si ya existe.
-    Evita duplicados para el mismo equipo+tipo.
+    Crea o actualiza una alerta activa.
+    Distingue los tóneres mediante el canal almacenado en datos_extra.
     """
-    filtros = {'tipo': tipo, 'estado': EstadoAlerta.ACTIVA}
-    if equipo_id:
+    datos_extra = datos_extra or {}
+
+    filtros = {
+        'tipo': tipo,
+        'estado': EstadoAlerta.ACTIVA,
+    }
+
+    if equipo_id is not None:
         filtros['equipo_id'] = equipo_id
-    if contrato_id and not equipo_id:
+
+        canal = datos_extra.get('canal')
+        if canal:
+            filtros['datos_extra__canal'] = canal
+
+    if contrato_id and equipo_id is None:
         filtros['contrato_id'] = contrato_id
 
     alerta, creada = Alerta.objects.update_or_create(
@@ -57,18 +69,30 @@ def _upsert_alerta(tipo, nivel, equipo_id=None, equipo_nombre='', equipo_serial=
             'contrato_id': contrato_id,
             'contrato_numero': contrato_numero,
             'mensaje': mensaje,
-            'datos_extra': datos_extra or {},
+            'datos_extra': datos_extra,
         }
     )
+
     return alerta, creada
 
 
-def resolver_alerta(tipo, equipo_id=None, contrato_id=None):
-    """Marca como resuelta una alerta activa cuando la condición ya no aplica."""
-    filtros = {'tipo': tipo, 'estado': EstadoAlerta.ACTIVA}
-    if equipo_id:
+def resolver_alerta(tipo, equipo_id=None, contrato_id=None, canal=None):
+    """
+    Resuelve una alerta activa cuando la condición deja de aplicar.
+    Permite resolver únicamente el canal correspondiente.
+    """
+    filtros = {
+        'tipo': tipo,
+        'estado': EstadoAlerta.ACTIVA,
+    }
+
+    if equipo_id is not None:
         filtros['equipo_id'] = equipo_id
-    if contrato_id and not equipo_id:
+
+        if canal:
+            filtros['datos_extra__canal'] = canal
+
+    if contrato_id and equipo_id is None:
         filtros['contrato_id'] = contrato_id
 
     Alerta.objects.filter(**filtros).update(
@@ -122,11 +146,21 @@ def verificar_alertas_toner():
                     f'Tóner {canal_display} del equipo {equipo_nombre} '
                     f'({equipo_serial}) al {pct}% — programar cambio pronto.'
                 )
+            
             else:
-                # Tóner OK — resolver alertas previas si las había
-                resolver_alerta(TipoAlerta.TONER_CRITICO, equipo_id=f'{equipo_id}_{canal}')
-                resolver_alerta(TipoAlerta.TONER_BAJO, equipo_id=f'{equipo_id}_{canal}')
+                # Tóner OK — resolver alertas previas de este canal
+                resolver_alerta(
+                    TipoAlerta.TONER_CRITICO,
+                    equipo_id=equipo_id,
+                    canal=canal
+                )
+                resolver_alerta(
+                    TipoAlerta.TONER_BAJO,
+                    equipo_id=equipo_id,
+                    canal=canal
+                )
                 continue
+
 
             _, creada = _upsert_alerta(
                 tipo=tipo,
